@@ -2,14 +2,14 @@ name: NanoPi-R2S RK3328 OpenWrt 19.07 Build
 
 on:
   push:
-    branches: 
-      - master
-      
+    paths:
+      - 'CHANGELOG.md'
+
 jobs:
 
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
 
@@ -43,13 +43,8 @@ jobs:
           rm -rf friendlywrt-rk3328
           mkdir friendlywrt-rk3328
           cd friendlywrt-rk3328
-          repo init -u https://github.com/friendlyarm/friendlywrt_manifests -b master -m rk3328.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
-
-      - name: Merge UpStearm OpenWrt
-        run: |
-          cd friendlywrt-rk3328/.repo/manifests
-          cp ../../../source_xml/rk3328_19.07.xml rk3328.xml
-          repo sync -c --no-clone-bundle
+          repo init -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v19.07.1 -m rk3328.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
+          repo sync -c --no-clone-bundle -j8
 
       - name: Merge LEDE
         run: |
@@ -93,6 +88,12 @@ jobs:
           cd friendlywrt-rk3328/friendlywrt/package
           git clone https://github.com/rufengsuixing/luci-app-adguardhome.git
 
+      - name: Upgrade argon theme
+        run: |
+          cd friendlywrt-rk3328/friendlywrt/package
+          rm -rf lean/luci-theme-argon
+          git clone -b 18.06 https://github.com/jerrykuku/luci-theme-argon.git
+
       - name: Update Target.mk
         run: |
           cd friendlywrt-rk3328/friendlywrt/include
@@ -107,13 +108,31 @@ jobs:
       - name: Install Mods
         run: |
           cd friendlywrt-rk3328
+          
+          #cp ../patches/31-usb_wifi friendlywrt/package/base-files/files/etc/hotplug.d/usb/31-usb_wifi
+
+          rm -rf friendlywrt/package/network/config/firewall
+          cp -r lede/package/network/config/firewall friendlywrt/package/network/config/
+          sed -i '/CONFIG_NETFILTER_XT_TARGET_HMARK/i\CONFIG_NETFILTER_XT_TARGET_FULLCONENAT=m' kernel/arch/arm64/configs/nanopi-r2_linux_defconfig
+          sed -i '/CONFIG_NETFILTER_XT_TARGET_IDLETIMER/a\obj-$(CONFIG_NETFILTER_XT_TARGET_FULLCONENAT) += xt_FULLCONENAT.o' kernel/net/netfilter/Makefile
+          cp ../xt_FULLCONENAT/xt_FULLCONENAT.c kernel/net/netfilter/xt_FULLCONENAT.c
+          cp ../xt_FULLCONENAT/ipv4-netfilter.Kconfig kernel/net/ipv4/netfilter/Kconfig
+          cp ../xt_FULLCONENAT/netfilter.Kconfig kernel/net/netfilter/Kconfig
+
+          git clone https://github.com/openwrt/openwrt
+          rm openwrt/target/linux/generic/pending-5.4/403-mtd-hook-mtdsplit-to-Kbuild.patch
+          rm openwrt/target/linux/generic/hack-5.4/700-swconfig_switch_drivers.patch
+          friendlywrt/scripts/patch-kernel.sh kernel openwrt/target/linux/generic/backport-5.4
+          friendlywrt/scripts/patch-kernel.sh kernel openwrt/target/linux/generic/pending-5.4
+          friendlywrt/scripts/patch-kernel.sh kernel openwrt/target/linux/generic/hack-5.4
+          echo "CONFIG_NETFILTER_XT_TARGET_FLOWOFFLOAD=m" >> kernel/arch/arm64/configs/nanopi-r2_linux_defconfig
+
           sed -i '/CONFIG_IB/d;/CONFIG_SDK/d;/CONFIG_BUILDBOT/d;/CONFIG_ALL_KMODS/d;/CONFIG_ALL_NONSHARED/d' configs/config_rk3328
-          sed -i '/iptparser/d;/docker/d;/DOCKER/d;/CONFIG_DISPLAY_SUPPORT/d;/CONFIG_AUDIO_SUPPORT/d' configs/config_rk3328
+          sed -i '/docker/Id;/CONFIG_DISPLAY_SUPPORT/d;/CONFIG_AUDIO_SUPPORT/d' configs/config_rk3328
+
           sed -i '/Load Average/i\\t\t<tr><td width="33%"><%:CPU Temperature%></td><td><%=luci.sys.exec("cut -c1-2 /sys/class/thermal/thermal_zone0/temp")%></td></tr>' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
+          sed -i 's/pcdata(boardinfo.system or "?")/"ARMv8"/' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
           sed -i "/redirect_https/d" friendlywrt/package/network/services/uhttpd/files/uhttpd.config
-          sed -i 's/1.19.0/1.20.0/g' friendlywrt/feeds/packages/admin/netdata/Makefile
-          sed -i 's/007656f639d3544698af503f35550aeb4d4d5a06b81801bf5acf4ac21db68f6e/c739e0fa8d6d7f433c0c7c8016b763e8f70519d67f0b5e7eca9ee5318f210d90/g' friendlywrt/feeds/packages/admin/netdata/Makefile
-          sed -i 's/+libjson-c/+libjson-c +libuv/' friendlywrt/feeds/packages/admin/netdata/Makefile
 
       - name: Custom Configure Files
         run: |
@@ -123,10 +142,7 @@ jobs:
       - name: Setting Defaults
         run: |
           cd friendlywrt-rk3328/friendlywrt
-          sed -i '/uci commit luci/i\uci set luci.themes.Argon=/luci-static/argon\nuci set luci.main.mediaurlbase=/luci-static/argon' package/lean/default-settings/files/zzz-default-settings
-          sed -i '/exit/i\chown -R root:root /usr/share/netdata/web\n' package/lean/default-settings/files/zzz-default-settings
-          sed -i 's/option fullcone\t1/option fullcone\t0/' package/network/config/firewall/files/firewall.config
-          sed -i '/8.8.8.8/d' package/base-files/files/root/setup.sh
+          sed -i '/uci commit luci/i\uci set luci.main.mediaurlbase=/luci-static/argon' package/lean/default-settings/files/zzz-default-settings
 
       - name: Install UPX
         run: |
@@ -135,11 +151,8 @@ jobs:
       - name: Build OpenWrt
         run: |
           cd friendlywrt-rk3328
+          sed -i 's/set -eu/set -u/' scripts/mk-friendlywrt.sh
           ./build.sh nanopi_r2s.mk
-
-      - name: Zip Files
-        run: |
-          find friendlywrt-rk3328/out/ -name "FriendlyWrt_*img*" | xargs -i zip -1 -r {}.zip {}
 
       - name: Save config.lite
         run: |
@@ -150,9 +163,12 @@ jobs:
         run: |
           rm -rf ./artifact/
           mkdir -p ./artifact/
-          find friendlywrt-rk3328/out/ -name "FriendlyWrt_*img.zip*" | xargs -i mv -f {} ./artifact/
+
+          find friendlywrt-rk3328/out/ -name "FriendlyWrt_*img*" | xargs -I{} sh -c 'f=$(basename $1); zip -r -j "./artifact/${f}.zip" $1' sh {} \;
+          find friendlywrt-rk3328/friendlywrt/bin/targets/rockchip-rk3328/generic -name "openwrt*-squashfs.img" | xargs -I{} sh -c 'f=$(basename $1); zip -r -j "./artifact/${f}.zip" $1' sh {} \;
+          
           cp friendlywrt-rk3328/friendlywrt/.config ./artifact/
-          cp friendlywrt-rk3328/friendlywrt/out/config.lite ./artifact/
+          cp friendlywrt-rk3328/out/config.lite ./artifact/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
