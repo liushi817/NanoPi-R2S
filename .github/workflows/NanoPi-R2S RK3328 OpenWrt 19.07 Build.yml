@@ -9,7 +9,7 @@ jobs:
 
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
 
@@ -70,10 +70,10 @@ jobs:
         run: |
           mkdir -p friendlywrt-rk3328/friendlywrt/package/base-files/files/etc/clash
           cd friendlywrt-rk3328/friendlywrt/package/base-files/files/etc/clash
-          wget https://github.com/Dreamacro/clash/releases/download/v0.18.0/clash-linux-armv8-v0.18.0.gz
-          gunzip clash-linux-armv8-v0.18.0.gz
-          chmod +x clash-linux-armv8-v0.18.0
-          mv clash-linux-armv8-v0.18.0 clash
+          wget https://github.com/Dreamacro/clash/releases/download/v0.19.0/clash-linux-armv8-v0.19.0.gz
+          gunzip clash-linux-armv8-v0.19.0.gz
+          chmod +x clash-linux-armv8-v0.19.0
+          mv clash-linux-armv8-v0.19.0 clash
           mkdir ../openclash
           cp clash ../openclash/
 
@@ -120,19 +120,17 @@ jobs:
           cp ../xt_FULLCONENAT/netfilter.Kconfig kernel/net/netfilter/Kconfig
 
           git clone https://github.com/openwrt/openwrt
-          rm openwrt/target/linux/generic/pending-5.4/403-mtd-hook-mtdsplit-to-Kbuild.patch
-          rm openwrt/target/linux/generic/hack-5.4/700-swconfig_switch_drivers.patch
-          friendlywrt/scripts/patch-kernel.sh kernel openwrt/target/linux/generic/backport-5.4
-          friendlywrt/scripts/patch-kernel.sh kernel openwrt/target/linux/generic/pending-5.4
-          friendlywrt/scripts/patch-kernel.sh kernel openwrt/target/linux/generic/hack-5.4
-          echo "CONFIG_NETFILTER_XT_TARGET_FLOWOFFLOAD=m" >> kernel/arch/arm64/configs/nanopi-r2_linux_defconfig
-
+          rm -rf friendlywrt/package/libs
+          cp -r openwrt/package/libs friendlywrt/package/
+          
           sed -i '/CONFIG_IB/d;/CONFIG_SDK/d;/CONFIG_BUILDBOT/d;/CONFIG_ALL_KMODS/d;/CONFIG_ALL_NONSHARED/d' configs/config_rk3328
           sed -i '/docker/Id;/CONFIG_DISPLAY_SUPPORT/d;/CONFIG_AUDIO_SUPPORT/d' configs/config_rk3328
 
           sed -i '/Load Average/i\\t\t<tr><td width="33%"><%:CPU Temperature%></td><td><%=luci.sys.exec("cut -c1-2 /sys/class/thermal/thermal_zone0/temp")%></td></tr>' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
           sed -i 's/pcdata(boardinfo.system or "?")/"ARMv8"/' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
           sed -i "/redirect_https/d" friendlywrt/package/network/services/uhttpd/files/uhttpd.config
+          sed -i 's/option fullcone\t1/option fullcone\t\t0/' friendlywrt/package/network/config/firewall/files/firewall.config
+          sed -i "s/flow_offloading '1'/flow_offloading '0'/" friendlywrt/package/lean/luci-app-flowoffload/root/etc/config/flowoffload
 
       - name: Custom Configure Files
         run: |
