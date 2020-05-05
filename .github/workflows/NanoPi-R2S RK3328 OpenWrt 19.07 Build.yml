@@ -9,7 +9,7 @@ jobs:
 
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
 
@@ -55,93 +55,78 @@ jobs:
           sed -i 's/^src-git luci.*/src-git luci https:\/\/github.com\/coolsnowwolf\/luci/' feeds.conf.default
           sed -i 's/^src-git packages.*/src-git packages https:\/\/github.com\/coolsnowwolf\/packages/' feeds.conf.default
 
-      - name: Install Luci for Clash
+      - name: Install Extra Packages
         run: |
           cd friendlywrt-rk3328/friendlywrt/package
           git clone https://github.com/frainzy1477/luci-app-clash
+          git clone https://github.com/rufengsuixing/luci-app-adguardhome
 
-      - name: Install OpenClash
-        run: |
-          git clone https://github.com/vernesong/OpenClash.git tmp
-          mv tmp/luci-app-openclash friendlywrt-rk3328/friendlywrt/package
-          rm -rf tmp
+          git clone https://github.com/fw876/helloworld
+          mv helloworld/luci-app-ssr-plus/ .
+          rm -rf helloworld/
 
-      - name: Install Clash Binaries
-        run: |
-          mkdir -p friendlywrt-rk3328/friendlywrt/package/base-files/files/etc/clash
-          cd friendlywrt-rk3328/friendlywrt/package/base-files/files/etc/clash
-          wget https://github.com/Dreamacro/clash/releases/download/v0.19.0/clash-linux-armv8-v0.19.0.gz
-          gunzip clash-linux-armv8-v0.19.0.gz
-          chmod +x clash-linux-armv8-v0.19.0
-          mv clash-linux-armv8-v0.19.0 clash
-          mkdir ../openclash
-          cp clash ../openclash/
-
-      - name: Set Clash Version
-        run: |
-          mkdir -p friendlywrt-rk3328/friendlywrt/package/base-files/files/usr/share/clash
-          cd friendlywrt-rk3328/friendlywrt/package/base-files/files/usr/share/clash
-          echo 0.18.0 > core_version
-
-      - name: Install AdGuard Home
-        run: |
-          cd friendlywrt-rk3328/friendlywrt/package
-          git clone https://github.com/rufengsuixing/luci-app-adguardhome.git
-
-      - name: Upgrade argon theme
-        run: |
-          cd friendlywrt-rk3328/friendlywrt/package
           rm -rf lean/luci-theme-argon
           git clone -b 18.06 https://github.com/jerrykuku/luci-theme-argon.git
+
+          git clone https://github.com/vernesong/OpenClash
+          mv OpenClash/luci-app-openclash/ .
+          rm -rf OpenClash/
+          
+          git clone https://github.com/songchenwen/nanopi-r2s
+          mv nanopi-r2s/luci-app-r2sflasher/ .
+          rm -rf nanopi-r2s/
+          
+      - name: Install Clash Binaries
+        run: |
+          cd friendlywrt-rk3328/friendlywrt/package/base-files/files
+          mkdir -p etc/clash
+          wget -qO- https://github.com/Dreamacro/clash/releases/download/v0.19.0/clash-linux-armv8-v0.19.0.gz | gunzip -c > etc/clash/clash
+
+          mkdir -p etc/openclash/core
+          cp etc/clash/clash etc/openclash/core/
+
+          mkdir -p usr/share/clash
+          echo 0.19.0 > usr/share/clash/core_version
 
       - name: Update Target.mk
         run: |
           cd friendlywrt-rk3328/friendlywrt/include
           sed -i 's/dnsmasq /dnsmasq-full default-settings luci /' target.mk
 
-      - name: Update Feeds
-        run: |
-          cd friendlywrt-rk3328/friendlywrt
-          ./scripts/feeds update -a
+      - name: Update Feeds		
+        run: |		
+          cd friendlywrt-rk3328/friendlywrt		
+          ./scripts/feeds update -a		
           ./scripts/feeds install -a
 
       - name: Install Mods
         run: |
           cd friendlywrt-rk3328
-          
+
+          sed -i '/STAMP_BUILT/d' friendlywrt/feeds/packages/utils/runc/Makefile
+          sed -i '/STAMP_BUILT/d' friendlywrt/feeds/packages/utils/containerd/Makefile
+
           #cp ../patches/31-usb_wifi friendlywrt/package/base-files/files/etc/hotplug.d/usb/31-usb_wifi
 
-          rm -rf friendlywrt/package/network/config/firewall
-          cp -r lede/package/network/config/firewall friendlywrt/package/network/config/
-          sed -i '/CONFIG_NETFILTER_XT_TARGET_HMARK/i\CONFIG_NETFILTER_XT_TARGET_FULLCONENAT=m' kernel/arch/arm64/configs/nanopi-r2_linux_defconfig
-          sed -i '/CONFIG_NETFILTER_XT_TARGET_IDLETIMER/a\obj-$(CONFIG_NETFILTER_XT_TARGET_FULLCONENAT) += xt_FULLCONENAT.o' kernel/net/netfilter/Makefile
-          cp ../xt_FULLCONENAT/xt_FULLCONENAT.c kernel/net/netfilter/xt_FULLCONENAT.c
-          cp ../xt_FULLCONENAT/ipv4-netfilter.Kconfig kernel/net/ipv4/netfilter/Kconfig
-          cp ../xt_FULLCONENAT/netfilter.Kconfig kernel/net/netfilter/Kconfig
-
-          git clone https://github.com/openwrt/openwrt
-          rm -rf friendlywrt/package/libs
-          cp -r openwrt/package/libs friendlywrt/package/
-          
-          sed -i '/CONFIG_IB/d;/CONFIG_SDK/d;/CONFIG_BUILDBOT/d;/CONFIG_ALL_KMODS/d;/CONFIG_ALL_NONSHARED/d' configs/config_rk3328
-          sed -i '/docker/Id;/CONFIG_DISPLAY_SUPPORT/d;/CONFIG_AUDIO_SUPPORT/d' configs/config_rk3328
-
-          sed -i '/Load Average/i\\t\t<tr><td width="33%"><%:CPU Temperature%></td><td><%=luci.sys.exec("cut -c1-2 /sys/class/thermal/thermal_zone0/temp")%></td></tr>' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
-          sed -i 's/pcdata(boardinfo.system or "?")/"ARMv8"/' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
           sed -i "/redirect_https/d" friendlywrt/package/network/services/uhttpd/files/uhttpd.config
-          sed -i 's/option fullcone\t1/option fullcone\t\t0/' friendlywrt/package/network/config/firewall/files/firewall.config
-          sed -i "s/flow_offloading '1'/flow_offloading '0'/" friendlywrt/package/lean/luci-app-flowoffload/root/etc/config/flowoffload
+          sed -i '/Load Average/i\\t\t<tr><td width="33%"><%:CPU Temperature%></td><td><%=luci.sys.exec("cut -c1-2 /sys/class/thermal/thermal_zone0/temp")%><span>&#8451;</span></td></tr>' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
+          sed -i 's/pcdata(boardinfo.system or "?")/"ARMv8"/' friendlywrt/feeds/luci/modules/luci-mod-admin-full/luasrc/view/admin_status/index.htm
+
+      - name: Patch Kernel
+        run: |
+          cd friendlywrt-rk3328/kernel/
+          git apply ../../patches/001-add-full_cone_nat.patch
 
       - name: Custom Configure Files
         run: |
           rm -f friendlywrt-rk3328/friendlywrt/.config*
-          cp r2s-rk3328-config friendlywrt-rk3328/friendlywrt/.config
+          cp r2s-rk3328-config friendlywrt-rk3328/configs/config_rk3328
 
-      - name: Setting Defaults
+      - name: Set Default Values
         run: |
           cd friendlywrt-rk3328/friendlywrt
           sed -i '/uci commit luci/i\uci set luci.main.mediaurlbase=/luci-static/argon' package/lean/default-settings/files/zzz-default-settings
-
+           
       - name: Install UPX
         run: |
           ln -s /usr/bin/upx-ucl friendlywrt-rk3328/friendlywrt/staging_dir/host/bin/upx
@@ -152,10 +137,18 @@ jobs:
           sed -i 's/set -eu/set -u/' scripts/mk-friendlywrt.sh
           ./build.sh nanopi_r2s.mk
 
-      - name: Save config.lite
+      - name: Fix Rootfs Owner and Group
         run: |
-          cd friendlywrt-rk3328/friendlywrt
-          ./scripts/diffconfig.sh > ../out/config.lite
+          sudo df -lh
+          lodev=$(sudo losetup -f)
+          echo "found unused loop dev $lodev"
+          sudo losetup -o 100663296 $lodev friendlywrt-rk3328/out/*.img
+          sudo rm -rf /mnt/friendlywrt-tmp
+          sudo mkdir -p /mnt/friendlywrt-tmp
+          sudo mount $lodev /mnt/friendlywrt-tmp
+          sudo chown -R root:root /mnt/friendlywrt-tmp
+          sudo umount /mnt/friendlywrt-tmp
+          sudo losetup -d $lodev
 
       - name: Assemble Artifact
         run: |
@@ -163,10 +156,9 @@ jobs:
           mkdir -p ./artifact/
 
           find friendlywrt-rk3328/out/ -name "FriendlyWrt_*img*" | xargs -I{} sh -c 'f=$(basename $1); zip -r -j "./artifact/${f}.zip" $1' sh {} \;
-          find friendlywrt-rk3328/friendlywrt/bin/targets/rockchip-rk3328/generic -name "openwrt*-squashfs.img" | xargs -I{} sh -c 'f=$(basename $1); zip -r -j "./artifact/${f}.zip" $1' sh {} \;
+          #find friendlywrt-rk3328/friendlywrt/bin/targets/rockchip-rk3328/generic -name "openwrt*-squashfs.img" | xargs -I{} sh -c 'f=$(basename $1); zip -r -j "./artifact/${f}.zip" $1' sh {} \;
           
           cp friendlywrt-rk3328/friendlywrt/.config ./artifact/
-          cp friendlywrt-rk3328/out/config.lite ./artifact/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
