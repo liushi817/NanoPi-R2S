@@ -1,5 +1,16 @@
-## 20200403
+## 20200508
+* 集成 smartdns
+* 集成 luci-app-smartdns
+* Clash 更新到 0.20.0
 
+## 20200418
+* 集成 luci-app-r2sflasher
+
+## 20200417
+* 重新整理 yml
+* 因应上游调整
+
+## 20200403
 * Kernel 5.4.29
 
 ## 20200329
@@ -7,7 +18,6 @@
 
 ## 20200326
 * 默认不开启 Full Cone NAT 与 Flow Offloading
-
 
 ## 20200311
 * 添加 xt_FLOWOFFLOAD
