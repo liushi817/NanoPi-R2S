@@ -1,4 +1,4 @@
-## 20200508  git clone https://github.com/tty228/luci-app-serverchan.git
+## 20200508    git clone https://github.com/tty228/luci-app-serverchan.git
 * 集成 smartdns
 * 集成 luci-app-smartdns
 * Clash 更新到 0.20.0
